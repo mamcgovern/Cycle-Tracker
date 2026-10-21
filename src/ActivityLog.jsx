@@ -24,7 +24,9 @@ import { auth, db } from "./firebase";
 import "./styles/activity-log.css";
 
 const STORAGE_KEY = "petal-activity-entries";
+const PERIOD_STORAGE_KEY = "petal-period-entries";
 const COLLECTION_NAME = "activityEntries";
+const MAX_CHART_DAYS = 60;
 
 function localDate(date = new Date()) {
   const year = date.getFullYear();
@@ -33,10 +35,21 @@ function localDate(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-function formatDate(dateString, options = {}) {
+function parseDate(dateString) {
   const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(year, month - 1, day, 12);
+}
 
-  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+function daysBetween(firstDate, secondDate) {
+  return Math.round(
+    (parseDate(secondDate).getTime() -
+      parseDate(firstDate).getTime()) /
+      86400000
+  );
+}
+
+function formatDate(dateString, options = {}) {
+  return parseDate(dateString).toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -54,6 +67,16 @@ function readEntries() {
   }
 }
 
+function readPeriodEntries() {
+  try {
+    const saved = localStorage.getItem(PERIOD_STORAGE_KEY);
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function makeId() {
   return (
     globalThis.crypto?.randomUUID?.() ??
@@ -61,8 +84,506 @@ function makeId() {
   );
 }
 
+// A cycle starts on the first day of light, medium, or heavy flow.
+// Spotting alone does not establish a cycle start.
+function getCycleStarts(periodEntries) {
+  const bleedingDates = new Set(
+    periodEntries
+      .filter((entry) =>
+        ["light", "medium", "heavy"].includes(entry.flow)
+      )
+      .map((entry) => entry.date || entry.id)
+      .filter(Boolean)
+  );
+
+  return [...bleedingDates]
+    .filter((date) => {
+      const previous = parseDate(date);
+      previous.setDate(previous.getDate() - 1);
+
+      const previousDate = [
+        previous.getFullYear(),
+        String(previous.getMonth() + 1).padStart(2, "0"),
+        String(previous.getDate()).padStart(2, "0"),
+      ].join("-");
+
+      return !bleedingDates.has(previousDate);
+    })
+    .sort();
+}
+
+function getCycleActivityData(activities, cycleStarts, cycleStart) {
+  if (!cycleStart) {
+    return {
+      points: [],
+      endDate: null,
+      isCurrent: false,
+    };
+  }
+
+  const cycleIndex = cycleStarts.indexOf(cycleStart);
+  const nextStart = cycleStarts[cycleIndex + 1] || null;
+
+  // Completed cycles end the day before the next period.
+  // The current cycle ends today.
+  const cycleLength = nextStart
+    ? daysBetween(cycleStart, nextStart)
+    : daysBetween(cycleStart, localDate()) + 1;
+
+  const chartDays = Math.min(
+    Math.max(cycleLength, 1),
+    MAX_CHART_DAYS
+  );
+
+  const countsByDay = {};
+
+  activities.forEach((entry) => {
+    if (!entry.date) return;
+    if (nextStart && entry.date >= nextStart) return;
+
+    const cycleDay = daysBetween(cycleStart, entry.date) + 1;
+
+    if (cycleDay < 1 || cycleDay > chartDays) return;
+
+    countsByDay[cycleDay] = (countsByDay[cycleDay] || 0) + 1;
+  });
+
+  const points = Array.from({ length: chartDays }, (_, index) => {
+    const day = index + 1;
+    const date = parseDate(cycleStart);
+    date.setDate(date.getDate() + index);
+
+    return {
+      day,
+      date: localDate(date),
+      count: countsByDay[day] || 0,
+    };
+  });
+
+  const endDate = parseDate(cycleStart);
+  endDate.setDate(endDate.getDate() + chartDays - 1);
+
+  return {
+    points,
+    endDate: nextStart
+      ? localDate(
+          new Date(parseDate(nextStart).getTime() - 86400000)
+        )
+      : localDate(endDate),
+    isCurrent: !nextStart,
+  };
+}
+
+function getAverageByCycleDay(activities, periodEntries, cycleStarts) {
+  if (!cycleStarts.length) return [];
+
+  const cycles = cycleStarts.map((start) =>
+    getCycleActivityData(activities, cycleStarts, start)
+  );
+
+  const maxDays = Math.max(
+    0,
+    ...cycles.map((cycle) => cycle.points.length)
+  );
+
+  return Array.from({ length: maxDays }, (_, index) => {
+    const day = index + 1;
+
+    // Only include cycles that actually reached this cycle day.
+    const counts = cycles
+      .filter((cycle) => cycle.points.length >= day)
+      .map((cycle) => cycle.points[day - 1].count);
+
+    return {
+      day,
+      average: counts.length
+        ? counts.reduce((sum, count) => sum + count, 0) /
+          counts.length
+        : 0,
+      cyclesIncluded: counts.length,
+    };
+  });
+}
+
+function ActivityCycleChart({ activities, periodEntries }) {
+  const cycleStarts = useMemo(
+    () => getCycleStarts(periodEntries),
+    [periodEntries]
+  );
+
+  const [selectedCycleIndex, setSelectedCycleIndex] = useState(
+    Math.max(0, cycleStarts.length - 1)
+  );
+
+  useEffect(() => {
+    setSelectedCycleIndex(Math.max(0, cycleStarts.length - 1));
+  }, [cycleStarts.length]);
+
+  const selectedCycle =
+    cycleStarts[selectedCycleIndex] || null;
+
+  const chartData = useMemo(
+    () =>
+      getCycleActivityData(
+        activities,
+        cycleStarts,
+        selectedCycle
+      ),
+    [activities, cycleStarts, selectedCycle]
+  );
+
+  const averageByCycleDay = useMemo(
+    () =>
+      getAverageByCycleDay(
+        activities,
+        periodEntries,
+        cycleStarts
+      ),
+    [activities, periodEntries, cycleStarts]
+  );
+
+  const points = chartData.points;
+
+  // Display the selected cycle and its average line over the same
+  // cycle-day range. The average itself uses every recorded cycle
+  // that has reached each day.
+  const visibleAverage = averageByCycleDay.slice(0, points.length);
+
+  const totalActivities = points.reduce(
+    (total, point) => total + point.count,
+    0
+  );
+
+  const width = 720;
+  const height = 300;
+  const left = 46;
+  const right = 20;
+  const top = 24;
+  const bottom = 48;
+
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
+
+  const maxValue = Math.max(
+    1,
+    ...points.map((point) => point.count),
+    ...visibleAverage.map((point) => point.average)
+  );
+
+  // Round the vertical scale up to a readable whole-number maximum.
+  const chartMax = Math.max(1, Math.ceil(maxValue));
+  const yTickCount = Math.min(chartMax + 1, 5);
+
+  const yTicks = Array.from(
+    { length: yTickCount },
+    (_, index) =>
+      Math.round(
+        (chartMax * index) / (yTickCount - 1 || 1)
+      )
+  ).filter(
+    (value, index, array) => array.indexOf(value) === index
+  );
+
+  const xPosition = (index, total) =>
+    total <= 1
+      ? left + plotWidth / 2
+      : left + (index / (total - 1)) * plotWidth;
+
+  const yPosition = (value) =>
+    top + plotHeight - (value / chartMax) * plotHeight;
+
+  const activityLinePoints = points
+    .map(
+      (point, index) =>
+        `${xPosition(index, points.length)},${yPosition(point.count)}`
+    )
+    .join(" ");
+
+  const averageLinePoints = visibleAverage
+    .map(
+      (point, index) =>
+        `${xPosition(index, points.length)},${yPosition(point.average)}`
+    )
+    .join(" ");
+
+  const xTickIndexes = useMemo(() => {
+    if (!points.length) return [];
+
+    const interval =
+      points.length <= 14
+        ? 2
+        : points.length <= 28
+          ? 4
+          : 7;
+
+    const indexes = [];
+
+    for (let index = 0; index < points.length; index += interval) {
+      indexes.push(index);
+    }
+
+    if (indexes[indexes.length - 1] !== points.length - 1) {
+      indexes.push(points.length - 1);
+    }
+
+    return indexes;
+  }, [points.length]);
+
+  function changeCycle(direction) {
+    setSelectedCycleIndex((current) =>
+      Math.min(
+        Math.max(current + direction, 0),
+        cycleStarts.length - 1
+      )
+    );
+  }
+
+  return (
+    <section className="activity-cycle-chart">
+      <div className="activity-panel-heading">
+        <div>
+          <p className="eyebrow">YOUR PATTERNS</p>
+          <h3>Activity by Cycle Day</h3>
+        </div>
+      </div>
+
+      <p className="activity-chart-description">
+        Compare your activity throughout the selected cycle with your
+        average for each cycle day across your recorded cycles.
+      </p>
+
+      {cycleStarts.length === 0 ? (
+        <div className="activity-chart-empty">
+          <Heart size={27} strokeWidth={1.5} />
+          <p>Log your period to start tracking cycle patterns.</p>
+          <span>
+            Your activity entries will be organized by cycle day once
+            a period start has been recorded.
+          </span>
+        </div>
+      ) : (
+        <>
+          <div className="activity-cycle-navigation">
+            <button
+              type="button"
+              className="activity-cycle-nav-button"
+              onClick={() => changeCycle(-1)}
+              disabled={selectedCycleIndex === 0}
+              aria-label="View previous cycle"
+            >
+              <ChevronLeft size={19} />
+            </button>
+
+            <div className="activity-cycle-selected">
+              <strong>Cycle {selectedCycleIndex + 1}</strong>
+              <span>
+                {formatDate(selectedCycle, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+                {" – "}
+                {chartData.endDate
+                  ? formatDate(chartData.endDate, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })
+                  : "In progress"}
+              </span>
+              <small>
+                {chartData.isCurrent
+                  ? "Current cycle"
+                  : "Completed cycle"}
+              </small>
+            </div>
+
+            <button
+              type="button"
+              className="activity-cycle-nav-button"
+              onClick={() => changeCycle(1)}
+              disabled={
+                selectedCycleIndex >= cycleStarts.length - 1
+              }
+              aria-label="View next cycle"
+            >
+              <ChevronRight size={19} />
+            </button>
+          </div>
+
+          <div className="activity-cycle-chart-summary">
+            <div>
+              <span className="activity-chart-stat-value">
+                {totalActivities}
+              </span>
+              <span className="activity-chart-stat-label">
+                Activities logged
+              </span>
+            </div>
+
+            <div>
+              <span className="activity-chart-stat-value">
+                {cycleStarts.length}
+              </span>
+              <span className="activity-chart-stat-label">
+                Cycles recorded
+              </span>
+            </div>
+          </div>
+
+          {points.length > 0 && (
+            <div className="activity-line-chart-wrap">
+              <svg
+                className="activity-line-chart"
+                viewBox={`0 0 ${width} ${height}`}
+                role="img"
+                aria-label={`Activity by cycle day for Cycle ${
+                  selectedCycleIndex + 1
+                }, compared with the average for each cycle day across ${
+                  cycleStarts.length
+                } recorded cycles`}
+              >
+                {yTicks.map((tick) => {
+                  const y = yPosition(tick);
+
+                  return (
+                    <g key={tick}>
+                      <line
+                        x1={left}
+                        x2={width - right}
+                        y1={y}
+                        y2={y}
+                        className="activity-chart-gridline"
+                      />
+                      <text
+                        x={left - 12}
+                        y={y + 4}
+                        textAnchor="end"
+                        className="activity-chart-axis-text"
+                      >
+                        {tick}
+                      </text>
+                    </g>
+                  );
+                })}
+
+                <line
+                  x1={left}
+                  x2={left}
+                  y1={top}
+                  y2={height - bottom}
+                  className="activity-chart-axis"
+                />
+
+                <line
+                  x1={left}
+                  x2={width - right}
+                  y1={height - bottom}
+                  y2={height - bottom}
+                  className="activity-chart-axis"
+                />
+
+                {/* Average for each cycle day across recorded cycles */}
+                {visibleAverage.length > 1 && (
+                  <polyline
+                    points={averageLinePoints}
+                    className="activity-chart-average-line"
+                  />
+                )}
+
+                {visibleAverage.map((point, index) => (
+                  <circle
+                    key={`average-${point.day}`}
+                    cx={xPosition(index, points.length)}
+                    cy={yPosition(point.average)}
+                    r={points.length > 35 ? 2.5 : 3.5}
+                    className="activity-chart-average-point"
+                  >
+                    <title>
+                      Cycle Day {point.day}: average{" "}
+                      {point.average.toFixed(2)} activities across{" "}
+                      {point.cyclesIncluded} cycles
+                    </title>
+                  </circle>
+                ))}
+
+                {/* Activity counts for the selected cycle */}
+                {points.length > 1 && (
+                  <polyline
+                    points={activityLinePoints}
+                    className="activity-chart-line"
+                  />
+                )}
+
+                {points.map((point, index) => (
+                  <circle
+                    key={point.day}
+                    cx={xPosition(index, points.length)}
+                    cy={yPosition(point.count)}
+                    r={points.length > 35 ? 2.5 : 4}
+                    className="activity-chart-point"
+                  >
+                    <title>
+                      Cycle Day {point.day}: {point.count}{" "}
+                      {point.count === 1
+                        ? "activity"
+                        : "activities"}{" "}
+                      logged ({formatDate(point.date)})
+                    </title>
+                  </circle>
+                ))}
+
+                {xTickIndexes.map((index) => (
+                  <text
+                    key={points[index].day}
+                    x={xPosition(index, points.length)}
+                    y={height - bottom + 23}
+                    textAnchor="middle"
+                    className="activity-chart-axis-text"
+                  >
+                    {points[index].day}
+                  </text>
+                ))}
+
+                <text
+                  x={width / 2}
+                  y={height - 5}
+                  textAnchor="middle"
+                  className="activity-chart-axis-title"
+                >
+                  Cycle Day
+                </text>
+              </svg>
+
+              <div className="activity-chart-legend">
+                <span className="activity-chart-legend-item">
+                  <span className="activity-chart-legend-line" />
+                  Selected cycle
+                </span>
+
+                <span className="activity-chart-legend-item">
+                  <span className="activity-chart-legend-line average" />
+                  Average by cycle day
+                </span>
+              </div>
+            </div>
+          )}
+
+          <p className="activity-chart-footnote">
+            The solid line shows the selected cycle. The dashed line
+            shows the average for each cycle day across recorded cycles.
+            Each average includes cycles that have reached that day,
+            including days with no logged activities.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
 function ActivityLog() {
   const [entries, setEntries] = useState(readEntries);
+  const [periodEntries, setPeriodEntries] = useState(readPeriodEntries);
   const [selectedDate, setSelectedDate] = useState(localDate());
   const [selectedPeriod, setSelectedPeriod] = useState("AM");
   const [pendingType, setPendingType] = useState("");
@@ -76,8 +597,6 @@ function ActivityLog() {
 
   const user = auth.currentUser;
 
-  // Keep the user's existing local entries and migrate only entries
-  // that do not already exist in Firestore.
   useEffect(() => {
     if (!user) {
       setSyncStatus("local");
@@ -106,23 +625,18 @@ function ActivityLog() {
 
         if (cancelled) return;
 
-        const cloudEntries = [];
+        const cloudEntries = cloudSnapshot.docs.map((snapshot) => ({
+          ...snapshot.data(),
+          id: snapshot.id,
+        }));
 
-        cloudSnapshot.forEach((snapshot) => {
-          cloudEntries.push({
-            ...snapshot.data(),
-            id: snapshot.id,
-          });
-        });
-
-        const cloudIds = new Set(cloudEntries.map((entry) => entry.id));
+        const cloudIds = new Set(
+          cloudEntries.map((entry) => entry.id)
+        );
 
         for (const entry of localEntries) {
           if (cancelled) return;
-
-          if (!entry.id || cloudIds.has(entry.id)) {
-            continue;
-          }
+          if (!entry.id || cloudIds.has(entry.id)) continue;
 
           const safeEntry = {
             id: entry.id,
@@ -138,7 +652,6 @@ function ActivityLog() {
 
         if (cancelled) return;
 
-        // Cloud records take precedence for matching IDs.
         const mergedEntries = new Map();
 
         localEntries.forEach((entry) => {
@@ -156,14 +669,15 @@ function ActivityLog() {
         unsubscribe = onSnapshot(
           entriesRef,
           (snapshot) => {
-            const latestEntries = snapshot.docs.map((entrySnapshot) => ({
-              ...entrySnapshot.data(),
-              id: entrySnapshot.id,
-            }));
-
             if (cancelled) return;
 
-            setEntries(latestEntries);
+            setEntries(
+              snapshot.docs.map((entrySnapshot) => ({
+                ...entrySnapshot.data(),
+                id: entrySnapshot.id,
+              }))
+            );
+
             setSyncStatus("synced");
             setSyncError("");
           },
@@ -199,7 +713,6 @@ function ActivityLog() {
     };
   }, [user?.uid]);
 
-  // Maintain a local backup of entries.
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
@@ -209,6 +722,46 @@ function ActivityLog() {
     }
   }, [entries]);
 
+  // Keep period entries synchronized for cycle-day calculations.
+  useEffect(() => {
+    if (!user) {
+      setPeriodEntries(readPeriodEntries());
+      return;
+    }
+
+    const periodEntriesRef = collection(
+      db,
+      "users",
+      user.uid,
+      "periodEntries"
+    );
+
+    return onSnapshot(
+      periodEntriesRef,
+      (snapshot) => {
+        const latestPeriodEntries = snapshot.docs.map((item) => ({
+          ...item.data(),
+          id: item.id,
+          date: item.data().date || item.id,
+        }));
+
+        setPeriodEntries(latestPeriodEntries);
+
+        try {
+          localStorage.setItem(
+            PERIOD_STORAGE_KEY,
+            JSON.stringify(latestPeriodEntries)
+          );
+        } catch (error) {
+          console.error("Unable to cache period entries:", error);
+        }
+      },
+      (error) => {
+        console.error("Unable to load period entries:", error);
+      }
+    );
+  }, [user?.uid]);
+
   const dayEntries = useMemo(
     () =>
       entries
@@ -217,7 +770,8 @@ function ActivityLog() {
           if (a.period !== b.period) {
             return a.period === "AM" ? -1 : 1;
           }
-          return a.createdAt - b.createdAt;
+
+          return (a.createdAt ?? 0) - (b.createdAt ?? 0);
         }),
     [entries, selectedDate]
   );
@@ -263,7 +817,6 @@ function ActivityLog() {
       createdAt: Date.now(),
     };
 
-    // Update the local UI immediately.
     setEntries((current) => [...current, entry]);
     setPendingType("");
 
@@ -290,7 +843,9 @@ function ActivityLog() {
         "Entry saved locally, but cloud sync failed. Check your connection and try again."
       );
       setSyncStatus("error");
-      setSyncError("A recent change may not be available on other devices yet.");
+      setSyncError(
+        "A recent change may not be available on other devices yet."
+      );
     }
   }
 
@@ -318,7 +873,6 @@ function ActivityLog() {
       period: editPeriod,
     };
 
-    // Update the local UI immediately.
     setEntries((current) =>
       current.map((entry) =>
         entry.id === updatedEntry.id ? updatedEntry : entry
@@ -334,7 +888,13 @@ function ActivityLog() {
 
     try {
       await setDoc(
-        doc(db, "users", user.uid, COLLECTION_NAME, updatedEntry.id),
+        doc(
+          db,
+          "users",
+          user.uid,
+          COLLECTION_NAME,
+          updatedEntry.id
+        ),
         {
           ...updatedEntry,
           updatedAt: new Date().toISOString(),
@@ -372,7 +932,9 @@ function ActivityLog() {
       }
     }
 
-    setEntries((current) => current.filter((entry) => entry.id !== id));
+    setEntries((current) =>
+      current.filter((entry) => entry.id !== id)
+    );
 
     if (editingEntry?.id === id) {
       setEditingEntry(null);
@@ -484,8 +1046,9 @@ function ActivityLog() {
             <button
               key={period}
               type="button"
-              className={`activity-period-button ${selectedPeriod === period ? "selected" : ""
-                }`}
+              className={`activity-period-button ${
+                selectedPeriod === period ? "selected" : ""
+              }`}
               aria-pressed={selectedPeriod === period}
               onClick={() => {
                 setSelectedPeriod(period);
@@ -505,8 +1068,9 @@ function ActivityLog() {
         <div className="activity-choice-grid">
           <button
             type="button"
-            className={`activity-choice-card activity-choice-unprotected ${pendingType === "unprotected" ? "chosen" : ""
-              }`}
+            className={`activity-choice-card activity-choice-unprotected ${
+              pendingType === "unprotected" ? "chosen" : ""
+            }`}
             aria-pressed={pendingType === "unprotected"}
             onClick={() => selectType("unprotected")}
           >
@@ -519,8 +1083,9 @@ function ActivityLog() {
 
           <button
             type="button"
-            className={`activity-choice-card activity-choice-condom ${pendingType === "condom" ? "chosen" : ""
-              }`}
+            className={`activity-choice-card activity-choice-condom ${
+              pendingType === "condom" ? "chosen" : ""
+            }`}
             aria-pressed={pendingType === "condom"}
             onClick={() => selectType("condom")}
           >
@@ -533,8 +1098,9 @@ function ActivityLog() {
 
           <button
             type="button"
-            className={`activity-choice-card activity-choice-other ${pendingType === "other" ? "chosen" : ""
-              }`}
+            className={`activity-choice-card activity-choice-other ${
+              pendingType === "other" ? "chosen" : ""
+            }`}
             aria-pressed={pendingType === "other"}
             onClick={() => selectType("other")}
           >
@@ -602,7 +1168,8 @@ function ActivityLog() {
 
         {storageError && (
           <p className="activity-storage-warning" role="alert">
-            Your browser could not save the local backup. Check your storage settings.
+            Your browser could not save the local backup. Check your
+            storage settings.
           </p>
         )}
       </section>
@@ -630,9 +1197,7 @@ function ActivityLog() {
           <div className="activity-entry-list">
             {dayEntries.map((entry, index) => (
               <article className="activity-entry-row" key={entry.id}>
-                <span
-                  className={`activity-entry-symbol ${entry.type}`}
-                >
+                <span className={`activity-entry-symbol ${entry.type}`}>
                   <ActivityIcon type={entry.type} />
                 </span>
 
@@ -689,8 +1254,9 @@ function ActivityLog() {
                 <button
                   key={period}
                   type="button"
-                  className={`activity-period-button ${editPeriod === period ? "selected" : ""
-                    }`}
+                  className={`activity-period-button ${
+                    editPeriod === period ? "selected" : ""
+                  }`}
                   aria-pressed={editPeriod === period}
                   onClick={() => setEditPeriod(period)}
                 >
@@ -715,6 +1281,11 @@ function ActivityLog() {
       <p className="activity-disclaimer">
         Entries are saved to your account and backed up in this browser.
       </p>
+
+      <ActivityCycleChart
+        activities={entries}
+        periodEntries={periodEntries}
+      />
     </div>
   );
 }

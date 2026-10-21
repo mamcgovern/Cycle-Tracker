@@ -606,6 +606,543 @@
   gap: 8px;
 }
 
+
+.activity-week-chart {
+  background: var(--activity-card, #fff);
+  border: 1px solid #eee5ec;
+  border-radius: 18px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.activity-chart-description,
+.activity-chart-footnote {
+  color: #766b7d;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.activity-chart-empty {
+  color: #766b7d;
+  font-size: 14px;
+  padding: 16px 0;
+}
+
+.activity-week-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+  margin: 24px 0;
+}
+
+.activity-week-row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 12px;
+}
+
+.activity-week-label {
+  color: #66596c;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.activity-week-track {
+  height: 12px;
+  background: #f3edf2;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.activity-week-fill {
+  height: 100%;
+  background: #c58aab;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.activity-week-value {
+  color: #514356;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.activity-chart-footnote {
+  margin-bottom: 0;
+}
+
+
+/* Activity by Cycle Day chart */
+
+.activity-cycle-chart {
+  background: var(--activity-card, #fff);
+  border: 1px solid #eee5ec;
+  border-radius: 18px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.activity-chart-description,
+.activity-chart-footnote {
+  color: #766b7d;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.activity-cycle-navigation {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0;
+}
+
+.activity-cycle-nav-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #eee5ec;
+  border-radius: 50%;
+  background: #fff;
+  color: #66596c;
+  cursor: pointer;
+}
+
+.activity-cycle-nav-button:hover:not(:disabled) {
+  background: #f8f1f6;
+}
+
+.activity-cycle-nav-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.activity-cycle-selected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.activity-cycle-selected strong {
+  color: #514356;
+  font-size: 15px;
+}
+
+.activity-cycle-selected span,
+.activity-cycle-selected small {
+  color: #766b7d;
+  font-size: 12px;
+}
+
+.activity-cycle-chart-summary {
+  display: flex;
+  gap: 36px;
+  padding: 16px 0 22px;
+  border-bottom: 1px solid #f0e8ef;
+}
+
+.activity-cycle-chart-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.activity-chart-stat-value {
+  color: #514356;
+  font-size: 25px;
+  font-weight: 600;
+}
+
+.activity-chart-stat-label {
+  color: #766b7d;
+  font-size: 12px;
+}
+
+.activity-line-chart-wrap {
+  width: 100%;
+  margin: 20px 0 10px;
+  overflow-x: auto;
+}
+
+.activity-line-chart {
+  display: block;
+  width: 100%;
+  min-width: 320px;
+  height: auto;
+  overflow: visible;
+}
+
+.activity-chart-gridline {
+  stroke: #eee7ed;
+  stroke-width: 1;
+}
+
+.activity-chart-axis {
+  stroke: #d9cdd8;
+  stroke-width: 1;
+}
+
+.activity-chart-axis-text {
+  fill: #766b7d;
+  font-size: 12px;
+}
+
+.activity-chart-axis-title {
+  fill: #66596c;
+  font-size: 12px;
+}
+
+.activity-chart-line {
+  fill: none;
+  stroke: #c58aab;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.activity-chart-point {
+  fill: #c58aab;
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.activity-chart-footnote {
+  margin: 14px 0 0;
+}
+
+.activity-chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 12px;
+  color: #766b7d;
+  text-align: center;
+}
+
+.activity-chart-empty p {
+  margin: 0;
+  color: #514356;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.activity-chart-empty span {
+  max-width: 340px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+@media (max-width: 480px) {
+  .activity-cycle-chart {
+    padding: 18px;
+  }
+
+  .activity-cycle-chart-summary {
+    gap: 24px;
+  }
+
+  .activity-chart-stat-value {
+    font-size: 22px;
+  }
+
+  .activity-cycle-navigation {
+    grid-template-columns: 36px minmax(0, 1fr) 36px;
+    gap: 8px;
+  }
+
+  .activity-cycle-nav-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .activity-cycle-selected span {
+    font-size: 11px;
+  }
+}
+
+.activity-chart-average-line {
+  stroke: #8d8195;
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+  opacity: 0.9;
+}
+
+.activity-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.activity-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #766b7d;
+  font-size: 12px;
+}
+
+.activity-chart-legend-line {
+  display: inline-block;
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+  background: #c58aab;
+}
+
+.activity-chart-legend-line.average {
+  height: 0;
+  border-top: 2px dashed #8d8195;
+  background: transparent;
+}
+
+/* Activity by Cycle Day chart */
+
+.activity-cycle-chart {
+  background: var(--activity-card, #fff);
+  border: 1px solid #eee5ec;
+  border-radius: 18px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.activity-chart-description,
+.activity-chart-footnote {
+  color: #766b7d;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.activity-cycle-navigation {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0;
+}
+
+.activity-cycle-nav-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #eee5ec;
+  border-radius: 50%;
+  background: #fff;
+  color: #66596c;
+  cursor: pointer;
+}
+
+.activity-cycle-nav-button:hover:not(:disabled) {
+  background: #f8f1f6;
+}
+
+.activity-cycle-nav-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.activity-cycle-selected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.activity-cycle-selected strong {
+  color: #514356;
+  font-size: 15px;
+}
+
+.activity-cycle-selected span,
+.activity-cycle-selected small {
+  color: #766b7d;
+  font-size: 12px;
+}
+
+.activity-cycle-chart-summary {
+  display: flex;
+  gap: 36px;
+  padding: 16px 0 22px;
+  border-bottom: 1px solid #f0e8ef;
+}
+
+.activity-cycle-chart-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.activity-chart-stat-value {
+  color: #514356;
+  font-size: 25px;
+  font-weight: 600;
+}
+
+.activity-chart-stat-label {
+  color: #766b7d;
+  font-size: 12px;
+}
+
+.activity-line-chart-wrap {
+  width: 100%;
+  margin: 20px 0 10px;
+  overflow-x: auto;
+}
+
+.activity-line-chart {
+  display: block;
+  width: 100%;
+  min-width: 320px;
+  height: auto;
+  overflow: visible;
+}
+
+.activity-chart-gridline {
+  stroke: #eee7ed;
+  stroke-width: 1;
+}
+
+.activity-chart-axis {
+  stroke: #d9cdd8;
+  stroke-width: 1;
+}
+
+.activity-chart-axis-text {
+  fill: #766b7d;
+  font-size: 12px;
+}
+
+.activity-chart-axis-title {
+  fill: #66596c;
+  font-size: 12px;
+}
+
+.activity-chart-line {
+  fill: none;
+  stroke: #c58aab;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.activity-chart-point {
+  fill: #c58aab;
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.activity-chart-average-line {
+  fill: none;
+  stroke: #8d8195;
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.activity-chart-average-point {
+  fill: #8d8195;
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.activity-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.activity-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #766b7d;
+  font-size: 12px;
+}
+
+.activity-chart-legend-line {
+  display: inline-block;
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+  background: #c58aab;
+}
+
+.activity-chart-legend-line.average {
+  height: 0;
+  border-top: 2px dashed #8d8195;
+  background: transparent;
+}
+
+.activity-chart-footnote {
+  margin: 14px 0 0;
+}
+
+.activity-chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 12px;
+  color: #766b7d;
+  text-align: center;
+}
+
+.activity-chart-empty p {
+  margin: 0;
+  color: #514356;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.activity-chart-empty span {
+  max-width: 340px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+@media (max-width: 480px) {
+  .activity-cycle-chart {
+    padding: 18px;
+  }
+
+  .activity-cycle-chart-summary {
+    gap: 24px;
+  }
+
+  .activity-chart-stat-value {
+    font-size: 22px;
+  }
+
+  .activity-cycle-navigation {
+    grid-template-columns: 36px minmax(0, 1fr) 36px;
+    gap: 8px;
+  }
+
+  .activity-cycle-nav-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .activity-cycle-selected span {
+    font-size: 11px;
+  }
+}
+
+
 @media (max-width: 480px) {
   .activity-selection-summary {
     align-items: stretch;
@@ -615,6 +1152,15 @@
   .activity-save-actions {
     display: grid;
     grid-template-columns: auto 1fr;
+  }
+
+  .activity-week-chart {
+    padding: 18px;
+  }
+
+  .activity-week-row {
+    grid-template-columns: 52px minmax(0, 1fr) 36px;
+    gap: 8px;
   }
 }
 

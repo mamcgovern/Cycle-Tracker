@@ -14,6 +14,9 @@ import {
   Flower2,
 } from "lucide-react";
 import { useState } from "react";
+import PeriodTracker from "./PeriodTracker";
+import BBTTracker from "./BBTTracker";
+import "./styles/dashboard.css";
 
 const navigation = [
   { label: "Overview", icon: House },
@@ -27,15 +30,6 @@ function App() {
   const [activePage, setActivePage] = useState("Overview");
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const pageDescriptions = {
-    Overview: "Your cycle, at a glance.",
-    Calendar: "Your cycle history, all in one place.",
-    "BBT Tracking": "Understand your temperature patterns.",
-    "Sex Log": "A private record, just for you.",
-    "Cycle Trends": "Discover patterns over time.",
-    Settings: "Make your tracker your own.",
-  };
-
   function navigateTo(page) {
     setActivePage(page);
     setMenuOpen(false);
@@ -48,10 +42,12 @@ function App() {
           <div className="brand-mark">
             <Flower2 size={27} strokeWidth={1.5} />
           </div>
+
           <div>
             <h2 className="brand-name">petal</h2>
             <p className="brand-subtitle">YOUR CYCLE JOURNAL</p>
           </div>
+
           <button
             className="mobile-close"
             onClick={() => setMenuOpen(false)}
@@ -74,6 +70,7 @@ function App() {
             >
               <Icon size={19} strokeWidth={1.7} />
               <span>{label}</span>
+
               {activePage === label && (
                 <span className="nav-indicator" />
               )}
@@ -99,6 +96,10 @@ function App() {
           >
             <Settings size={19} strokeWidth={1.7} />
             <span>Settings</span>
+
+            {activePage === "Settings" && (
+              <span className="nav-indicator" />
+            )}
           </button>
 
           <p className="sidebar-footer">YOUR BODY, YOUR STORY.</p>
@@ -123,7 +124,9 @@ function App() {
             <Menu size={23} />
           </button>
 
-          <span className="topbar-label">YOUR PERSONAL CYCLE TRACKER</span>
+          <span className="topbar-label">
+            YOUR PERSONAL CYCLE TRACKER
+          </span>
 
           <div className="topbar-status">
             <span className="status-dot" />
@@ -132,30 +135,31 @@ function App() {
         </header>
 
         <div className="page-content">
-          <section className="welcome-section">
-            <div>
-              <p className="eyebrow">A LITTLE SPACE FOR YOU</p>
-              <h1>{activePage === "Overview" ? "Hello, lovely." : activePage}</h1>
-              <p className="welcome-description">
-                {pageDescriptions[activePage]}
-              </p>
-            </div>
-
-            <div className="welcome-flower" aria-hidden="true">
-              <Flower2 size={76} strokeWidth={0.8} />
-            </div>
-          </section>
-
           {activePage === "Overview" ? (
             <>
+              <section className="welcome-section">
+                <div>
+                  <p className="eyebrow">A LITTLE SPACE FOR YOU</p>
+                  <h1>Hello, lovely.</h1>
+                  <p className="welcome-description">
+                    Your cycle, at a glance.
+                  </p>
+                </div>
+
+                <div className="welcome-flower" aria-hidden="true">
+                  <Flower2 size={76} strokeWidth={0.8} />
+                </div>
+              </section>
+
               <section className="cycle-banner">
                 <div className="cycle-banner-copy">
                   <span className="banner-label">YOUR CYCLE</span>
                   <h2>Your story starts here.</h2>
                   <p>
-                    Log your first period to start discovering your personal
-                    patterns.
+                    Log your cycle and temperature to start
+                    discovering your personal patterns.
                   </p>
+
                   <button
                     className="button-primary"
                     onClick={() => navigateTo("Calendar")}
@@ -165,7 +169,10 @@ function App() {
                   </button>
                 </div>
 
-                <div className="banner-decoration" aria-hidden="true">
+                <div
+                  className="banner-decoration"
+                  aria-hidden="true"
+                >
                   <div className="banner-circle banner-circle-one" />
                   <div className="banner-circle banner-circle-two" />
                   <Flower2 size={100} strokeWidth={0.8} />
@@ -178,6 +185,7 @@ function App() {
                     <p className="eyebrow">YOUR DAILY JOURNAL</p>
                     <h2>Quick log</h2>
                   </div>
+
                   <span className="section-caption">
                     Start wherever you are
                   </span>
@@ -191,11 +199,16 @@ function App() {
                     <span className="quick-log-icon">
                       <Droplets size={22} />
                     </span>
-                    <span className="quick-log-title">Period & flow</span>
+                    <span className="quick-log-title">
+                      Period &amp; flow
+                    </span>
                     <span className="quick-log-description">
                       Record your flow
                     </span>
-                    <ChevronRight className="quick-log-arrow" size={19} />
+                    <ChevronRight
+                      className="quick-log-arrow"
+                      size={19}
+                    />
                   </button>
 
                   <button
@@ -205,11 +218,16 @@ function App() {
                     <span className="quick-log-icon">
                       <Thermometer size={22} />
                     </span>
-                    <span className="quick-log-title">Temperature</span>
+                    <span className="quick-log-title">
+                      Temperature
+                    </span>
                     <span className="quick-log-description">
                       Log your BBT
                     </span>
-                    <ChevronRight className="quick-log-arrow" size={19} />
+                    <ChevronRight
+                      className="quick-log-arrow"
+                      size={19}
+                    />
                   </button>
 
                   <button
@@ -223,7 +241,10 @@ function App() {
                     <span className="quick-log-description">
                       Add a private entry
                     </span>
-                    <ChevronRight className="quick-log-arrow" size={19} />
+                    <ChevronRight
+                      className="quick-log-arrow"
+                      size={19}
+                    />
                   </button>
                 </div>
               </section>
@@ -242,8 +263,12 @@ function App() {
                       <CalendarDays size={20} />
                     </span>
                     <p className="stat-label">Average cycle</p>
-                    <p className="stat-value">-- <span>days</span></p>
-                    <p className="stat-note">Build your history first</p>
+                    <p className="stat-value">
+                      -- <span>days</span>
+                    </p>
+                    <p className="stat-note">
+                      Build your history first
+                    </p>
                   </article>
 
                   <article className="stat-card">
@@ -251,8 +276,12 @@ function App() {
                       <Droplets size={20} />
                     </span>
                     <p className="stat-label">Average period</p>
-                    <p className="stat-value">-- <span>days</span></p>
-                    <p className="stat-note">Based on your entries</p>
+                    <p className="stat-value">
+                      -- <span>days</span>
+                    </p>
+                    <p className="stat-note">
+                      Based on your entries
+                    </p>
                   </article>
 
                   <article className="stat-card">
@@ -260,8 +289,12 @@ function App() {
                       <Thermometer size={20} />
                     </span>
                     <p className="stat-label">Latest BBT</p>
-                    <p className="stat-value">-- <span>°F</span></p>
-                    <p className="stat-note">Your latest reading</p>
+                    <p className="stat-value">
+                      -- <span>°F</span>
+                    </p>
+                    <p className="stat-note">
+                      Your latest reading
+                    </p>
                   </article>
                 </div>
               </section>
@@ -273,28 +306,38 @@ function App() {
                 <div>
                   <h3>A note to remember</h3>
                   <p>
-                    Your patterns take time to emerge. Start logging when
-                    you're ready, and your personal trends will grow with you.
+                    Your patterns take time to emerge. Start logging
+                    when you're ready, and your personal trends will
+                    grow with you.
                   </p>
                 </div>
               </section>
             </>
+          ) : activePage === "Calendar" ? (
+            <PeriodTracker />
+          ) : activePage === "BBT Tracking" ? (
+            <BBTTracker />
           ) : (
             <section className="placeholder-page">
               <div className="placeholder-icon">
-                {activePage === "Calendar" && <CalendarDays size={30} />}
-                {activePage === "BBT Tracking" && <Thermometer size={30} />}
                 {activePage === "Sex Log" && <Heart size={30} />}
+
                 {activePage === "Cycle Trends" && (
                   <ChartNoAxesCombined size={30} />
                 )}
-                {activePage === "Settings" && <Settings size={30} />}
+
+                {activePage === "Settings" && (
+                  <Settings size={30} />
+                )}
               </div>
+
               <h2>{activePage}</h2>
+
               <p>
-                This is where your {activePage.toLowerCase()} tools will live.
-                We'll build this section next.
+                This is where your {activePage.toLowerCase()} tools
+                will live. We'll build this section next.
               </p>
+
               <button
                 className="button-primary"
                 onClick={() => navigateTo("Overview")}

@@ -12,8 +12,18 @@ import {
   Menu,
   X,
   Flower2,
+  LogOut,
+  Mail,
+  LockKeyhole,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
+import { auth } from "./firebase";
 import PeriodTracker from "./PeriodTracker";
 import BBTTracker from "./BBTTracker";
 import ActivityLog from "./ActivityLog";
@@ -28,13 +38,388 @@ const navigation = [
   { label: "Cycle Trends", icon: ChartNoAxesCombined },
 ];
 
+function AuthScreen() {
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError("");
+    setIsSubmitting(true);
+
+    try {
+      if (isCreatingAccount) {
+        await createUserWithEmailAndPassword(
+          auth,
+          email.trim(),
+          password
+        );
+      } else {
+        await signInWithEmailAndPassword(
+          auth,
+          email.trim(),
+          password
+        );
+      }
+    } catch (err) {
+      const messages = {
+        "auth/email-already-in-use":
+          "An account already exists with this email. Try signing in instead.",
+        "auth/invalid-email":
+          "Please enter a valid email address.",
+        "auth/weak-password":
+          "Your password must be at least 6 characters long.",
+        "auth/invalid-credential":
+          "Your email or password is incorrect. Please try again.",
+        "auth/user-not-found":
+          "No account was found with that email. You can create an account instead.",
+        "auth/wrong-password":
+          "Your email or password is incorrect. Please try again.",
+        "auth/too-many-requests":
+          "There have been too many attempts. Please wait a little before trying again.",
+        "auth/network-request-failed":
+          "Unable to connect. Check your internet connection and try again.",
+        "auth/operation-not-allowed":
+          "Email and password sign-in is not enabled in Firebase Authentication.",
+      };
+
+      setError(
+        messages[err.code] ||
+          "Something went wrong. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const inputStyle = {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "13px 14px",
+    border: "1px solid #eee4f0",
+    borderRadius: "10px",
+    background: "#fffafd",
+    color: "#352b3a",
+    fontFamily: "inherit",
+    fontSize: "15px",
+    outlineOffset: "3px",
+  };
+
+  return (
+    <main
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "24px",
+        boxSizing: "border-box",
+        background:
+          "linear-gradient(145deg, #fffafd 0%, #f8effa 55%, #fdf1f6 100%)",
+        color: "#352b3a",
+        fontFamily: "'Playfair Display', serif",
+      }}
+    >
+      <section
+        style={{
+          width: "100%",
+          maxWidth: "420px",
+          padding: "40px",
+          boxSizing: "border-box",
+          background: "#ffffff",
+          border: "1px solid #eee4f0",
+          borderRadius: "22px",
+          boxShadow: "0 16px 45px rgba(91, 64, 105, 0.08)",
+        }}
+      >
+        <div style={{ textAlign: "center", marginBottom: "30px" }}>
+          <div
+            style={{
+              width: "58px",
+              height: "58px",
+              margin: "0 auto 14px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: "18px",
+              background: "#f5eafa",
+              color: "#9b78ad",
+            }}
+          >
+            <Flower2 size={32} strokeWidth={1.4} />
+          </div>
+
+          <h1
+            style={{
+              margin: "0 0 8px",
+              fontSize: "36px",
+              fontWeight: 500,
+              letterSpacing: "1px",
+            }}
+          >
+            petal
+          </h1>
+
+          <p
+            style={{
+              margin: 0,
+              color: "#766b7d",
+              fontSize: "12px",
+              letterSpacing: "2px",
+            }}
+          >
+            YOUR CYCLE JOURNAL
+          </p>
+        </div>
+
+        <h2
+          style={{
+            margin: "0 0 8px",
+            fontSize: "23px",
+            fontWeight: 500,
+            textAlign: "center",
+          }}
+        >
+          {isCreatingAccount ? "Create your account" : "Welcome back"}
+        </h2>
+
+        <p
+          style={{
+            margin: "0 0 26px",
+            color: "#766b7d",
+            textAlign: "center",
+            fontSize: "14px",
+            lineHeight: 1.6,
+          }}
+        >
+          {isCreatingAccount
+            ? "Create your personal space to keep your cycle journal with you."
+            : "Sign in to access your personal cycle journal."}
+        </p>
+
+        <form onSubmit={handleSubmit}>
+          <label
+            htmlFor="petal-email"
+            style={{
+              display: "block",
+              marginBottom: "8px",
+              fontSize: "14px",
+            }}
+          >
+            Email address
+          </label>
+
+          <div style={{ position: "relative", marginBottom: "20px" }}>
+            <Mail
+              size={18}
+              strokeWidth={1.6}
+              style={{
+                position: "absolute",
+                left: "13px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: "#9a8ba1",
+                pointerEvents: "none",
+              }}
+            />
+            <input
+              id="petal-email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              style={{ ...inputStyle, paddingLeft: "42px" }}
+            />
+          </div>
+
+          <label
+            htmlFor="petal-password"
+            style={{
+              display: "block",
+              marginBottom: "8px",
+              fontSize: "14px",
+            }}
+          >
+            Password
+          </label>
+
+          <div style={{ position: "relative", marginBottom: "16px" }}>
+            <LockKeyhole
+              size={18}
+              strokeWidth={1.6}
+              style={{
+                position: "absolute",
+                left: "13px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: "#9a8ba1",
+                pointerEvents: "none",
+              }}
+            />
+            <input
+              id="petal-password"
+              type="password"
+              autoComplete={
+                isCreatingAccount ? "new-password" : "current-password"
+              }
+              required
+              minLength={6}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="At least 6 characters"
+              style={{ ...inputStyle, paddingLeft: "42px" }}
+            />
+          </div>
+
+          {error && (
+            <p
+              role="alert"
+              style={{
+                margin: "0 0 16px",
+                padding: "12px",
+                borderRadius: "9px",
+                background: "#fff0f2",
+                color: "#a13c54",
+                fontSize: "13px",
+                lineHeight: 1.5,
+              }}
+            >
+              {error}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            style={{
+              width: "100%",
+              padding: "14px",
+              border: "none",
+              borderRadius: "10px",
+              background: isSubmitting ? "#cdb4db" : "#b994ca",
+              color: "#ffffff",
+              fontFamily: "inherit",
+              fontSize: "15px",
+              cursor: isSubmitting ? "wait" : "pointer",
+              marginTop: "8px",
+            }}
+          >
+            {isSubmitting
+              ? "Please wait..."
+              : isCreatingAccount
+                ? "Create account"
+                : "Sign in"}
+          </button>
+        </form>
+
+        <p
+          style={{
+            margin: "24px 0 0",
+            textAlign: "center",
+            fontSize: "14px",
+            color: "#766b7d",
+            lineHeight: 1.8,
+          }}
+        >
+          {isCreatingAccount
+            ? "Already have an account?"
+            : "New to petal?"}{" "}
+          <button
+            type="button"
+            onClick={() => {
+              setIsCreatingAccount(!isCreatingAccount);
+              setError("");
+            }}
+            style={{
+              padding: 0,
+              border: "none",
+              background: "none",
+              color: "#9369a8",
+              fontFamily: "inherit",
+              fontSize: "14px",
+              textDecoration: "underline",
+              cursor: "pointer",
+            }}
+          >
+            {isCreatingAccount ? "Sign in" : "Create an account"}
+          </button>
+        </p>
+
+        <p
+          style={{
+            margin: "28px 0 0",
+            color: "#938698",
+            fontSize: "12px",
+            lineHeight: 1.6,
+            textAlign: "center",
+          }}
+        >
+          Your personal space to learn about your cycle.
+        </p>
+      </section>
+    </main>
+  );
+}
+
 function App() {
   const [activePage, setActivePage] = useState("Overview");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [signOutError, setSignOutError] = useState("");
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  async function handleSignOut() {
+    setSignOutError("");
+
+    try {
+      await signOut(auth);
+    } catch {
+      setSignOutError("Unable to sign out. Please try again.");
+    }
+  }
 
   function navigateTo(page) {
     setActivePage(page);
     setMenuOpen(false);
+  }
+
+  if (authLoading) {
+    return (
+      <main
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "16px",
+          background: "#fffafd",
+          color: "#766b7d",
+          fontFamily: "'Playfair Display', serif",
+        }}
+      >
+        <Flower2 size={38} strokeWidth={1.3} color="#b994ca" />
+        <p>Opening your personal space...</p>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return <AuthScreen />;
   }
 
   return (
@@ -101,6 +486,21 @@ function App() {
               <span className="nav-indicator" />
             )}
           </button>
+
+          <button
+            className="nav-link"
+            onClick={handleSignOut}
+            style={{ marginTop: "8px" }}
+          >
+            <LogOut size={19} strokeWidth={1.7} />
+            <span>Sign out</span>
+          </button>
+
+          {signOutError && (
+            <p role="alert" style={{ fontSize: "12px", color: "#a13c54" }}>
+              {signOutError}
+            </p>
+          )}
 
           <p className="sidebar-footer">YOUR BODY, YOUR STORY.</p>
         </div>

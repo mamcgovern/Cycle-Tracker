@@ -12,9 +12,19 @@ import {
   Check,
   Save,
 } from "lucide-react";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  onSnapshot,
+  setDoc,
+} from "firebase/firestore";
+import { auth, db } from "./firebase";
 import "./styles/activity-log.css";
 
 const STORAGE_KEY = "petal-activity-entries";
+const COLLECTION_NAME = "activityEntries";
 
 function localDate(date = new Date()) {
   const year = date.getFullYear();
@@ -45,8 +55,10 @@ function readEntries() {
 }
 
 function makeId() {
-  return globalThis.crypto?.randomUUID?.() ??
-    `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
 }
 
 function ActivityLog() {
@@ -58,7 +70,136 @@ function ActivityLog() {
   const [editingEntry, setEditingEntry] = useState(null);
   const [editPeriod, setEditPeriod] = useState("AM");
   const [storageError, setStorageError] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("connecting");
+  const [syncError, setSyncError] = useState("");
+  const [isReady, setIsReady] = useState(false);
 
+  const user = auth.currentUser;
+
+  // Keep the user's existing local entries and migrate only entries
+  // that do not already exist in Firestore.
+  useEffect(() => {
+    if (!user) {
+      setSyncStatus("local");
+      setIsReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    let unsubscribe = null;
+
+    async function initializeSync() {
+      setSyncStatus("connecting");
+      setSyncError("");
+      setIsReady(false);
+
+      try {
+        const entriesRef = collection(
+          db,
+          "users",
+          user.uid,
+          COLLECTION_NAME
+        );
+
+        const localEntries = readEntries();
+        const cloudSnapshot = await getDocs(entriesRef);
+
+        if (cancelled) return;
+
+        const cloudEntries = [];
+
+        cloudSnapshot.forEach((snapshot) => {
+          cloudEntries.push({
+            ...snapshot.data(),
+            id: snapshot.id,
+          });
+        });
+
+        const cloudIds = new Set(cloudEntries.map((entry) => entry.id));
+
+        for (const entry of localEntries) {
+          if (cancelled) return;
+
+          if (!entry.id || cloudIds.has(entry.id)) {
+            continue;
+          }
+
+          const safeEntry = {
+            id: entry.id,
+            date: entry.date,
+            period: entry.period === "PM" ? "PM" : "AM",
+            type: entry.type ?? "other",
+            createdAt: entry.createdAt ?? Date.now(),
+            updatedAt: new Date().toISOString(),
+          };
+
+          await setDoc(doc(entriesRef, entry.id), safeEntry);
+        }
+
+        if (cancelled) return;
+
+        // Cloud records take precedence for matching IDs.
+        const mergedEntries = new Map();
+
+        localEntries.forEach((entry) => {
+          mergedEntries.set(entry.id, entry);
+        });
+
+        cloudEntries.forEach((entry) => {
+          mergedEntries.set(entry.id, entry);
+        });
+
+        setEntries(Array.from(mergedEntries.values()));
+        setSyncStatus("synced");
+        setIsReady(true);
+
+        unsubscribe = onSnapshot(
+          entriesRef,
+          (snapshot) => {
+            const latestEntries = snapshot.docs.map((entrySnapshot) => ({
+              ...entrySnapshot.data(),
+              id: entrySnapshot.id,
+            }));
+
+            if (cancelled) return;
+
+            setEntries(latestEntries);
+            setSyncStatus("synced");
+            setSyncError("");
+          },
+          (error) => {
+            console.error("Activity Log sync listener error:", error);
+
+            if (!cancelled) {
+              setSyncStatus("error");
+              setSyncError(
+                "Cloud updates are unavailable. Your local entries are still available."
+              );
+            }
+          }
+        );
+      } catch (error) {
+        console.error("Unable to synchronize Activity Log:", error);
+
+        if (!cancelled) {
+          setSyncStatus("error");
+          setSyncError(
+            "Could not connect to cloud storage. Your local entries are still available."
+          );
+          setIsReady(true);
+        }
+      }
+    }
+
+    initializeSync();
+
+    return () => {
+      cancelled = true;
+      if (unsubscribe) unsubscribe();
+    };
+  }, [user?.uid]);
+
+  // Maintain a local backup of entries.
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
@@ -103,9 +244,14 @@ function ActivityLog() {
     setMessage("");
   }
 
-  function saveEntry() {
+  async function saveEntry() {
     if (!pendingType) {
       setMessage("Choose an activity before saving.");
+      return;
+    }
+
+    if (!isReady) {
+      setMessage("Please wait until your entries finish loading.");
       return;
     }
 
@@ -117,9 +263,35 @@ function ActivityLog() {
       createdAt: Date.now(),
     };
 
+    // Update the local UI immediately.
     setEntries((current) => [...current, entry]);
     setPendingType("");
-    setMessage("Entry saved.");
+
+    if (!user) {
+      setMessage("Entry saved on this device.");
+      return;
+    }
+
+    try {
+      await setDoc(
+        doc(db, "users", user.uid, COLLECTION_NAME, entry.id),
+        {
+          ...entry,
+          updatedAt: new Date().toISOString(),
+        }
+      );
+
+      setMessage("Entry saved and synced.");
+      setSyncStatus("synced");
+      setSyncError("");
+    } catch (error) {
+      console.error("Unable to save activity entry:", error);
+      setMessage(
+        "Entry saved locally, but cloud sync failed. Check your connection and try again."
+      );
+      setSyncStatus("error");
+      setSyncError("A recent change may not be available on other devices yet.");
+    }
   }
 
   function cancelSelection() {
@@ -133,31 +305,82 @@ function ActivityLog() {
     setMessage("");
   }
 
-  function saveEdit() {
+  async function saveEdit() {
     if (!editingEntry) return;
 
+    if (!isReady) {
+      setMessage("Please wait until your entries finish loading.");
+      return;
+    }
+
+    const updatedEntry = {
+      ...editingEntry,
+      period: editPeriod,
+    };
+
+    // Update the local UI immediately.
     setEntries((current) =>
       current.map((entry) =>
-        entry.id === editingEntry.id
-          ? { ...entry, period: editPeriod }
-          : entry
+        entry.id === updatedEntry.id ? updatedEntry : entry
       )
     );
 
     setEditingEntry(null);
-    setMessage("Changes saved.");
+
+    if (!user) {
+      setMessage("Changes saved on this device.");
+      return;
+    }
+
+    try {
+      await setDoc(
+        doc(db, "users", user.uid, COLLECTION_NAME, updatedEntry.id),
+        {
+          ...updatedEntry,
+          updatedAt: new Date().toISOString(),
+        }
+      );
+
+      setMessage("Changes saved and synced.");
+      setSyncStatus("synced");
+      setSyncError("");
+    } catch (error) {
+      console.error("Unable to update activity entry:", error);
+      setMessage(
+        "Changes saved locally, but cloud sync failed. Please try again."
+      );
+      setSyncStatus("error");
+    }
   }
 
-  function deleteEntry(id) {
-    setEntries((current) =>
-      current.filter((entry) => entry.id !== id)
-    );
+  async function deleteEntry(id) {
+    if (!isReady) {
+      setMessage("Please wait until your entries finish loading.");
+      return;
+    }
+
+    if (user) {
+      try {
+        await deleteDoc(
+          doc(db, "users", user.uid, COLLECTION_NAME, id)
+        );
+      } catch (error) {
+        console.error("Unable to delete activity entry:", error);
+        setMessage("Unable to delete the cloud entry. Please try again.");
+        setSyncStatus("error");
+        return;
+      }
+    }
+
+    setEntries((current) => current.filter((entry) => entry.id !== id));
 
     if (editingEntry?.id === id) {
       setEditingEntry(null);
     }
 
-    setMessage("Entry deleted.");
+    setMessage(
+      user ? "Entry deleted." : "Entry deleted from this device."
+    );
   }
 
   function activityLabel(type) {
@@ -189,6 +412,24 @@ function ActivityLog() {
           <Heart size={28} strokeWidth={1.5} />
         </div>
       </section>
+
+      <p
+        className="activity-sync-status"
+        role="status"
+        style={{
+          fontSize: "13px",
+          color: syncStatus === "error" ? "#a13c54" : "#766b7d",
+          margin: "0 0 12px",
+        }}
+      >
+        {syncStatus === "connecting" &&
+          "Connecting your entries to your account..."}
+        {syncStatus === "synced" &&
+          "Your Activity Log is synced with your account."}
+        {syncStatus === "local" &&
+          "Your entries are saved on this device only."}
+        {syncStatus === "error" && syncError}
+      </p>
 
       <section className="activity-date-card">
         <div className="activity-date-row">
@@ -243,9 +484,8 @@ function ActivityLog() {
             <button
               key={period}
               type="button"
-              className={`activity-period-button ${
-                selectedPeriod === period ? "selected" : ""
-              }`}
+              className={`activity-period-button ${selectedPeriod === period ? "selected" : ""
+                }`}
               aria-pressed={selectedPeriod === period}
               onClick={() => {
                 setSelectedPeriod(period);
@@ -265,9 +505,8 @@ function ActivityLog() {
         <div className="activity-choice-grid">
           <button
             type="button"
-            className={`activity-choice-card activity-choice-unprotected ${
-              pendingType === "unprotected" ? "chosen" : ""
-            }`}
+            className={`activity-choice-card activity-choice-unprotected ${pendingType === "unprotected" ? "chosen" : ""
+              }`}
             aria-pressed={pendingType === "unprotected"}
             onClick={() => selectType("unprotected")}
           >
@@ -280,9 +519,8 @@ function ActivityLog() {
 
           <button
             type="button"
-            className={`activity-choice-card activity-choice-condom ${
-              pendingType === "condom" ? "chosen" : ""
-            }`}
+            className={`activity-choice-card activity-choice-condom ${pendingType === "condom" ? "chosen" : ""
+              }`}
             aria-pressed={pendingType === "condom"}
             onClick={() => selectType("condom")}
           >
@@ -295,9 +533,8 @@ function ActivityLog() {
 
           <button
             type="button"
-            className={`activity-choice-card activity-choice-other ${
-              pendingType === "other" ? "chosen" : ""
-            }`}
+            className={`activity-choice-card activity-choice-other ${pendingType === "other" ? "chosen" : ""
+              }`}
             aria-pressed={pendingType === "other"}
             onClick={() => selectType("other")}
           >
@@ -340,6 +577,7 @@ function ActivityLog() {
                 type="button"
                 className="activity-save-entry"
                 onClick={saveEntry}
+                disabled={!isReady}
               >
                 <Save size={17} />
                 Save Entry
@@ -364,7 +602,7 @@ function ActivityLog() {
 
         {storageError && (
           <p className="activity-storage-warning" role="alert">
-            Your browser could not save this entry. Check your storage settings.
+            Your browser could not save the local backup. Check your storage settings.
           </p>
         )}
       </section>
@@ -411,6 +649,7 @@ function ActivityLog() {
                     onClick={() => startEditing(entry)}
                     aria-label="Edit entry time of day"
                     title="Edit entry"
+                    disabled={!isReady}
                   >
                     <Pencil size={16} />
                   </button>
@@ -420,6 +659,7 @@ function ActivityLog() {
                     onClick={() => deleteEntry(entry.id)}
                     aria-label="Delete entry"
                     title="Delete entry"
+                    disabled={!isReady}
                   >
                     <Trash2 size={16} />
                   </button>
@@ -449,9 +689,8 @@ function ActivityLog() {
                 <button
                   key={period}
                   type="button"
-                  className={`activity-period-button ${
-                    editPeriod === period ? "selected" : ""
-                  }`}
+                  className={`activity-period-button ${editPeriod === period ? "selected" : ""
+                    }`}
                   aria-pressed={editPeriod === period}
                   onClick={() => setEditPeriod(period)}
                 >
@@ -464,6 +703,7 @@ function ActivityLog() {
               type="button"
               className="activity-save-edit"
               onClick={saveEdit}
+              disabled={!isReady}
             >
               <Save size={16} />
               Save Changes
@@ -473,8 +713,7 @@ function ActivityLog() {
       </section>
 
       <p className="activity-disclaimer">
-        Entries are saved in this browser. They do not sync between devices
-        until cloud syncing is configured.
+        Entries are saved to your account and backed up in this browser.
       </p>
     </div>
   );

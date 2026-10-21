@@ -9,8 +9,18 @@ import {
   Clock,
   Moon,
 } from "lucide-react";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  onSnapshot,
+  setDoc,
+} from "firebase/firestore";
+import { auth, db } from "./firebase";
 
 const STORAGE_KEY = "petal-bbt-entries";
+const COLLECTION_NAME = "bbtEntries";
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear();
@@ -74,7 +84,8 @@ function BBTChart({ entries, unit }) {
 
   const x = (index) =>
     padLeft +
-    (index / Math.max(points.length - 1, 1)) * (width - padLeft - padRight);
+    (index / Math.max(points.length - 1, 1)) *
+      (width - padLeft - padRight);
 
   const y = (value) =>
     padTop +
@@ -91,11 +102,13 @@ function BBTChart({ entries, unit }) {
     (index) => max - ((max - min) * index) / 3
   );
 
-  const labelIndices = [...new Set([
-    0,
-    Math.floor((points.length - 1) / 2),
-    points.length - 1,
-  ])];
+  const labelIndices = [
+    ...new Set([
+      0,
+      Math.floor((points.length - 1) / 2),
+      points.length - 1,
+    ]),
+  ];
 
   return (
     <div className="bbt-chart-wrap">
@@ -136,7 +149,7 @@ function BBTChart({ entries, unit }) {
             className="bbt-point"
           >
             <title>
-              {formatDate(date)}: {entry.temperature} {unit}
+              {formatDate(date)}: {entry.temperature} {entry.unit ?? unit}
             </title>
           </circle>
         ))}
@@ -179,18 +192,151 @@ function BBTTracker() {
   const [sleepQuality, setSleepQuality] = useState("normal");
   const [notes, setNotes] = useState("");
   const [message, setMessage] = useState("");
+  const [syncStatus, setSyncStatus] = useState("connecting");
+  const [syncError, setSyncError] = useState("");
+  const [isReady, setIsReady] = useState(false);
 
+  const user = auth.currentUser;
+
+  // Migrate local readings without overwriting existing cloud records,
+  // then listen for changes from this user's other devices.
+  useEffect(() => {
+    if (!user) {
+      setSyncStatus("local");
+      setIsReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    let unsubscribe = null;
+
+    async function initializeSync() {
+      setSyncStatus("connecting");
+      setSyncError("");
+      setIsReady(false);
+
+      try {
+        const entriesRef = collection(
+          db,
+          "users",
+          user.uid,
+          COLLECTION_NAME
+        );
+
+        const localEntries = readEntries();
+        const cloudSnapshot = await getDocs(entriesRef);
+
+        if (cancelled) return;
+
+        const cloudEntries = {};
+
+        cloudSnapshot.forEach((snapshot) => {
+          const data = snapshot.data();
+
+          cloudEntries[snapshot.id] = {
+            temperature: data.temperature,
+            unit: data.unit ?? "°F",
+            measurementTime: data.measurementTime ?? "06:00",
+            sleepQuality: data.sleepQuality ?? "normal",
+            notes: data.notes ?? "",
+          };
+        });
+
+        // Preserve existing cloud entries. Upload local entries only for
+        // dates that are not already present in the cloud.
+        for (const [date, entry] of Object.entries(localEntries)) {
+          if (cancelled) return;
+
+          if (
+            !Object.prototype.hasOwnProperty.call(cloudEntries, date)
+          ) {
+            await setDoc(doc(entriesRef, date), {
+              temperature: Number(entry.temperature),
+              unit: entry.unit ?? "°F",
+              measurementTime: entry.measurementTime ?? "06:00",
+              sleepQuality: entry.sleepQuality ?? "normal",
+              notes: entry.notes ?? "",
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        }
+
+        if (cancelled) return;
+
+        setEntries({
+          ...localEntries,
+          ...cloudEntries,
+        });
+
+        setSyncStatus("synced");
+        setIsReady(true);
+
+        unsubscribe = onSnapshot(
+          entriesRef,
+          (snapshot) => {
+            const latestEntries = {};
+
+            snapshot.forEach((entrySnapshot) => {
+              const data = entrySnapshot.data();
+
+              latestEntries[entrySnapshot.id] = {
+                temperature: data.temperature,
+                unit: data.unit ?? "°F",
+                measurementTime: data.measurementTime ?? "06:00",
+                sleepQuality: data.sleepQuality ?? "normal",
+                notes: data.notes ?? "",
+              };
+            });
+
+            if (cancelled) return;
+
+            setEntries(latestEntries);
+            setSyncStatus("synced");
+            setSyncError("");
+          },
+          (error) => {
+            console.error("BBT sync listener error:", error);
+            setSyncStatus("error");
+            setSyncError(
+              "Cloud updates are unavailable. Your local readings are still available."
+            );
+          }
+        );
+      } catch (error) {
+        console.error("Unable to synchronize BBT entries:", error);
+
+        if (!cancelled) {
+          setSyncStatus("error");
+          setSyncError(
+            "Could not connect to cloud storage. Your local readings are still available."
+          );
+          setIsReady(true);
+        }
+      }
+    }
+
+    initializeSync();
+
+    return () => {
+      cancelled = true;
+      if (unsubscribe) unsubscribe();
+    };
+  }, [user?.uid]);
+
+  // Keep a local backup of the readings.
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
     } catch {
-      setMessage("Unable to save. Check your browser storage settings.");
+      setMessage("Unable to save a local backup. Check your browser storage settings.");
     }
   }, [entries]);
 
   useEffect(() => {
     const entry = entries[selectedDate];
+
     setTemperature(entry ? String(entry.temperature) : "");
+    setUnit(entry?.unit ?? "°F");
     setMeasurementTime(entry?.measurementTime ?? "06:00");
     setSleepQuality(entry?.sleepQuality ?? "normal");
     setNotes(entry?.notes ?? "");
@@ -214,7 +360,7 @@ function BBTTracker() {
       ) / recentValues.length
     : null;
 
-  function saveEntry(event) {
+  async function saveEntry(event) {
     event.preventDefault();
 
     const value = Number(temperature);
@@ -234,33 +380,142 @@ function BBTTracker() {
       return;
     }
 
+    const entry = {
+      temperature: value,
+      unit,
+      measurementTime,
+      sleepQuality,
+      notes: notes.trim(),
+    };
+
     setEntries((current) => ({
       ...current,
-      [selectedDate]: {
-        temperature: value,
-        unit,
-        measurementTime,
-        sleepQuality,
-        notes: notes.trim(),
-      },
+      [selectedDate]: entry,
     }));
 
-    setMessage("Temperature entry saved.");
+    if (!user) {
+      setMessage("Temperature entry saved locally.");
+      return;
+    }
+
+    try {
+      await setDoc(
+        doc(db, "users", user.uid, COLLECTION_NAME, selectedDate),
+        {
+          ...entry,
+          updatedAt: new Date().toISOString(),
+        }
+      );
+
+      setMessage("Temperature entry saved and synced.");
+      setSyncStatus("synced");
+      setSyncError("");
+    } catch (error) {
+      console.error("Unable to save BBT entry:", error);
+      setMessage(
+        "Saved locally, but cloud sync failed. Check your connection and try again."
+      );
+      setSyncStatus("error");
+    }
   }
 
-  function deleteEntry(date = selectedDate) {
+  async function deleteEntry(date = selectedDate) {
+    if (user) {
+      try {
+        await deleteDoc(
+          doc(db, "users", user.uid, COLLECTION_NAME, date)
+        );
+      } catch (error) {
+        console.error("Unable to delete BBT entry:", error);
+        setMessage("Unable to delete the cloud reading. Please try again.");
+        return;
+      }
+    }
+
     setEntries((current) => {
       const updated = { ...current };
       delete updated[date];
       return updated;
     });
-    setMessage("Temperature entry deleted.");
+
+    setMessage(
+      user ? "Temperature entry deleted." : "Reading deleted from this device."
+    );
   }
 
   function changeDate(amount) {
     const [year, month, day] = selectedDate.split("-").map(Number);
     const date = new Date(year, month - 1, day + amount);
     setSelectedDate(getLocalDateString(date));
+  }
+
+  async function changeUnit(option) {
+    if (unit === option) return;
+
+    const existing = entries[selectedDate];
+
+    if (existing) {
+      const oldUnit = existing.unit ?? unit;
+
+      if (oldUnit === option) {
+        setUnit(option);
+        setTemperature(String(existing.temperature));
+        return;
+      }
+
+      const converted =
+        option === "°C"
+          ? (Number(existing.temperature) - 32) * 5 / 9
+          : Number(existing.temperature) * 9 / 5 + 32;
+
+      const updatedEntry = {
+        ...existing,
+        temperature: Number(converted.toFixed(2)),
+        unit: option,
+      };
+
+      setTemperature(converted.toFixed(2));
+      setUnit(option);
+      setEntries((current) => ({
+        ...current,
+        [selectedDate]: updatedEntry,
+      }));
+
+      if (user) {
+        try {
+          await setDoc(
+            doc(db, "users", user.uid, COLLECTION_NAME, selectedDate),
+            {
+              ...updatedEntry,
+              updatedAt: new Date().toISOString(),
+            }
+          );
+          setSyncStatus("synced");
+          setSyncError("");
+        } catch (error) {
+          console.error("Unable to sync temperature unit change:", error);
+          setSyncStatus("error");
+          setMessage(
+            "Unit changed on this device, but cloud sync failed. Save the reading again when connected."
+          );
+        }
+      }
+    } else {
+      setTemperature((current) => {
+        if (!current.trim() || !Number.isFinite(Number(current))) {
+          return "";
+        }
+
+        const converted =
+          option === "°C"
+            ? (Number(current) - 32) * 5 / 9
+            : Number(current) * 9 / 5 + 32;
+
+        return converted.toFixed(2);
+      });
+
+      setUnit(option);
+    }
   }
 
   function displayTemperature(entry) {
@@ -280,6 +535,23 @@ function BBTTracker() {
           <Thermometer size={32} strokeWidth={1.4} />
         </div>
       </section>
+
+      <p
+        role="status"
+        style={{
+          fontSize: "13px",
+          color: syncStatus === "error" ? "#a13c54" : "#766b7d",
+          margin: "0 0 12px",
+        }}
+      >
+        {syncStatus === "connecting" &&
+          "Connecting your temperature readings to your account..."}
+        {syncStatus === "synced" &&
+          "Your temperature readings are synced with your account."}
+        {syncStatus === "local" &&
+          "Your readings are saved on this device only."}
+        {syncStatus === "error" && syncError}
+      </p>
 
       <section className="bbt-panel bbt-entry-panel">
         <div className="bbt-date-navigation">
@@ -325,40 +597,7 @@ function BBTTracker() {
                   key={option}
                   type="button"
                   className={unit === option ? "unit-active" : ""}
-                  onClick={() => {
-                    if (unit === option) return;
-
-                    const existing = entries[selectedDate];
-                    if (existing) {
-                      const oldUnit = existing.unit ?? unit;
-                      const converted =
-                        option === "°C"
-                          ? (Number(existing.temperature) - 32) * 5 / 9
-                          : Number(existing.temperature) * 9 / 5 + 32;
-                      setTemperature(
-                        converted.toFixed(option === "°C" ? 2 : 2)
-                      );
-                      setEntries((current) => ({
-                        ...current,
-                        [selectedDate]: {
-                          ...existing,
-                          temperature:
-                            Number(converted.toFixed(2)),
-                          unit: option,
-                        },
-                      }));
-                    } else {
-                      setTemperature((current) => {
-                        if (!current) return "";
-                        const converted =
-                          option === "°C"
-                            ? (Number(current) - 32) * 5 / 9
-                            : Number(current) * 9 / 5 + 32;
-                        return converted.toFixed(2);
-                      });
-                    }
-                    setUnit(option);
-                  }}
+                  onClick={() => changeUnit(option)}
                 >
                   {option}
                 </button>
@@ -426,9 +665,13 @@ function BBTTracker() {
           </label>
 
           <div className="bbt-form-actions">
-            <button type="submit" className="button-primary">
+            <button
+              type="submit"
+              className="button-primary"
+              disabled={!isReady}
+            >
               <Save size={16} />
-              Save reading
+              {isReady ? "Save reading" : "Loading readings..."}
             </button>
 
             {entries[selectedDate] && (
@@ -436,6 +679,7 @@ function BBTTracker() {
                 type="button"
                 className="bbt-delete-button"
                 onClick={() => deleteEntry()}
+                disabled={!isReady}
               >
                 <Trash2 size={16} />
                 Delete
@@ -443,7 +687,9 @@ function BBTTracker() {
             )}
           </div>
 
-          {message && <p className="bbt-message" role="status">{message}</p>}
+          {message && (
+            <p className="bbt-message" role="status">{message}</p>
+          )}
         </form>
       </section>
 

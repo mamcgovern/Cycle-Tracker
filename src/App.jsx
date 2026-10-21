@@ -17,6 +17,7 @@ import { useState } from "react";
 import PeriodTracker from "./PeriodTracker";
 import BBTTracker from "./BBTTracker";
 import ActivityLog from "./ActivityLog";
+import CycleTrends from "./CycleTrends";
 import "./styles/dashboard.css";
 
 const navigation = [
@@ -72,9 +73,7 @@ function App() {
               <Icon size={19} strokeWidth={1.7} />
               <span>{label}</span>
 
-              {activePage === label && (
-                <span className="nav-indicator" />
-              )}
+              {activePage === label && <span className="nav-indicator" />}
             </button>
           ))}
         </nav>
@@ -170,10 +169,7 @@ function App() {
                   </button>
                 </div>
 
-                <div
-                  className="banner-decoration"
-                  aria-hidden="true"
-                >
+                <div className="banner-decoration" aria-hidden="true">
                   <div className="banner-circle banner-circle-one" />
                   <div className="banner-circle banner-circle-two" />
                   <Flower2 size={100} strokeWidth={0.8} />
@@ -322,16 +318,12 @@ function App() {
             <BBTTracker />
           ) : activePage === "Activity Log" ? (
             <ActivityLog />
+          ) : activePage === "Cycle Trends" ? (
+            <CycleTrends />
           ) : (
             <section className="placeholder-page">
               <div className="placeholder-icon">
-                {activePage === "Cycle Trends" && (
-                  <ChartNoAxesCombined size={30} />
-                )}
-
-                {activePage === "Settings" && (
-                  <Settings size={30} />
-                )}
+                {activePage === "Settings" && <Settings size={30} />}
               </div>
 
               <h2>{activePage}</h2>

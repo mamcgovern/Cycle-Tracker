@@ -491,6 +491,134 @@
   line-height: 1.7;
 }
 
+
+.activity-choice-card.chosen {
+  border-color: #c078a4;
+  background: #fff0f6;
+  box-shadow: inset 0 0 0 1px #c078a4;
+}
+
+.activity-choice-condom.chosen {
+  border-color: #80b5c0;
+  background: #eef8fa;
+  box-shadow: inset 0 0 0 1px #80b5c0;
+}
+
+.activity-choice-other.chosen {
+  border-color: #b39acb;
+  background: #f7f2fc;
+  box-shadow: inset 0 0 0 1px #b39acb;
+}
+
+.activity-selection-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #eadbea;
+  border-radius: 13px;
+  background: #fffbfd;
+}
+
+.activity-selection-details {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.activity-selection-icon {
+  display: grid;
+  flex: 0 0 38px;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: #fff0f5;
+  color: #a45f80;
+}
+
+.activity-selection-details > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.activity-selection-details strong {
+  font-size: 0.85rem;
+}
+
+.activity-selection-details small {
+  color: var(--text-secondary);
+  font-size: 0.73rem;
+}
+
+.activity-save-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-cancel-selection,
+.activity-save-entry {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 13px;
+  border-radius: 10px;
+  font-family: Arial, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.activity-cancel-selection {
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--text-secondary);
+}
+
+.activity-save-entry {
+  border: 1px solid #c078a4;
+  background: #c078a4;
+  color: white;
+}
+
+.activity-save-entry:hover {
+  border-color: #a75d89;
+  background: #a75d89;
+}
+
+.activity-cancel-selection:hover {
+  background: #faf6fc;
+}
+
+.activity-save-edit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .activity-selection-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .activity-save-actions {
+    display: grid;
+    grid-template-columns: auto 1fr;
+  }
+}
+
+
 @media (max-width: 680px) {
   .activity-log {
     gap: 15px;

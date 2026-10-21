@@ -6,6 +6,7 @@ import {
   Thermometer,
   TrendingUp,
   Heart,
+  Activity,
 } from "lucide-react";
 import "./styles/cycle-trends.css";
 
@@ -100,12 +101,6 @@ function getTemperatureReadings(entries) {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/*
- * Looks for six consecutive baseline temperatures followed by
- * three consecutive temperatures at least 0.3°F above that baseline.
- *
- * This is an informational pattern check, not confirmation of ovulation.
- */
 function findPossibleTemperatureShift(readings) {
   if (readings.length < 9) return null;
 
@@ -139,10 +134,6 @@ function findPossibleTemperatureShift(readings) {
       return {
         firstHigherDate: higherReadings[0].date,
         thirdHigherDate: higherReadings[2].date,
-        baselineAverage,
-        higherAverage: average(
-          higherReadings.map((reading) => reading.temperature)
-        ),
       };
     }
   }
@@ -287,7 +278,6 @@ function CycleTrends() {
   const [periodEntries] = useState(() =>
     readStorage(PERIOD_STORAGE_KEY)
   );
-
   const [bbtEntries] = useState(() =>
     readStorage(BBT_STORAGE_KEY)
   );
@@ -311,6 +301,7 @@ function CycleTrends() {
     () =>
       cycleStarts.slice(1).map((date, index) => ({
         startDate: date,
+        previousStartDate: cycleStarts[index],
         length: daysBetween(cycleStarts[index], date),
       })),
     [cycleStarts]
@@ -334,6 +325,7 @@ function CycleTrends() {
         })
         .map((episode) => ({
           startDate: episode[0],
+          endDate: episode[episode.length - 1],
           length: episode.length,
         })),
     [episodes, periodEntries]
@@ -362,12 +354,29 @@ function CycleTrends() {
     periodLengths.map((period) => period.length)
   );
 
+  const shortestCycle = cycleLengths.length
+    ? Math.min(...cycleLengths.map((cycle) => cycle.length))
+    : null;
+
+  const longestCycle = cycleLengths.length
+    ? Math.max(...cycleLengths.map((cycle) => cycle.length))
+    : null;
+
+  const cycleVariation =
+    shortestCycle !== null && longestCycle !== null
+      ? longestCycle - shortestCycle
+      : null;
+
   const latestBBT = bbtReadings[0] ?? null;
 
   const recentCycleLengths = [...cycleLengths]
     .reverse()
     .slice(-6)
     .reverse();
+
+  const recentPeriodLengths = [...periodLengths]
+    .reverse()
+    .slice(-6);
 
   return (
     <div className="cycle-trends">
@@ -428,9 +437,7 @@ function CycleTrends() {
           </span>
           <p>Latest temperature</p>
           <strong>
-            {latestBBT
-              ? latestBBT.temperature.toFixed(2)
-              : "—"}
+            {latestBBT ? latestBBT.temperature.toFixed(2) : "—"}
             {latestBBT && <small> °F</small>}
           </strong>
           <span className="trends-stat-note">
@@ -444,56 +451,141 @@ function CycleTrends() {
       <section className="trends-panel">
         <div className="trends-section-heading">
           <div>
-            <p className="eyebrow">YOUR HISTORY</p>
-            <h3>Cycle length over time</h3>
+            <p className="eyebrow">CYCLE COMPARISONS</p>
+            <h3>Your cycle consistency</h3>
           </div>
-          <span className="trends-count">
-            {cycleLengths.length} interval
-            {cycleLengths.length === 1 ? "" : "s"}
-          </span>
+          <Activity size={22} strokeWidth={1.5} />
         </div>
 
-        {recentCycleLengths.length === 0 ? (
+        {cycleLengths.length === 0 ? (
           <div className="trends-empty">
             <CalendarDays size={28} strokeWidth={1.4} />
-            <p>Your cycle history will grow here.</p>
+            <p>More cycle data is needed for comparisons.</p>
             <span>
-              Record bleeding days in your Period Calendar. Once two
-              period starts are recorded, your cycle length can be
-              calculated.
+              Once you have recorded at least two period start dates,
+              petal can calculate cycle length and begin comparing cycles.
             </span>
           </div>
         ) : (
-          <div className="cycle-length-list">
-            {recentCycleLengths.map((cycle) => (
-              <div
-                className="cycle-length-row"
-                key={cycle.startDate}
-              >
-                <div className="cycle-length-date">
-                  <span>Period started</span>
-                  <strong>{formatDate(cycle.startDate)}</strong>
-                </div>
-
-                <div className="cycle-length-meter">
-                  <div className="cycle-length-track">
-                    <span
-                      style={{
-                        width: `${Math.min(
-                          (cycle.length / 45) * 100,
-                          100
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <strong className="cycle-length-value">
-                  {cycle.length} days
+          <>
+            <div className="trends-stat-grid">
+              <article className="trends-stat-card">
+                <p>Shortest cycle</p>
+                <strong>
+                  {shortestCycle}
+                  <small> days</small>
                 </strong>
-              </div>
-            ))}
+              </article>
+
+              <article className="trends-stat-card">
+                <p>Longest cycle</p>
+                <strong>
+                  {longestCycle}
+                  <small> days</small>
+                </strong>
+              </article>
+
+              <article className="trends-stat-card">
+                <p>Cycle range</p>
+                <strong>
+                  {cycleVariation}
+                  <small> days</small>
+                </strong>
+              </article>
+            </div>
+
+            <p className="trends-chart-caption">
+              The cycle range is the difference between your longest
+              and shortest recorded cycle. More records will make this
+              comparison more useful.
+            </p>
+
+            <div className="cycle-length-list">
+              {recentCycleLengths.map((cycle) => (
+                <div className="cycle-length-row" key={cycle.startDate}>
+                  <div className="cycle-length-date">
+                    <span>Period started</span>
+                    <strong>{formatDate(cycle.startDate)}</strong>
+                  </div>
+
+                  <div className="cycle-length-meter">
+                    <div className="cycle-length-track">
+                      <span
+                        style={{
+                          width: `${Math.min(
+                            (cycle.length / 45) * 100,
+                            100
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <strong className="cycle-length-value">
+                    {cycle.length} days
+                  </strong>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="trends-panel">
+        <div className="trends-section-heading">
+          <div>
+            <p className="eyebrow">PERIOD COMPARISONS</p>
+            <h3>Period duration over time</h3>
           </div>
+          <span className="trends-count">
+            {periodLengths.length} recorded
+          </span>
+        </div>
+
+        {recentPeriodLengths.length === 0 ? (
+          <div className="trends-empty">
+            <Droplets size={28} strokeWidth={1.4} />
+            <p>Your period history will appear here.</p>
+            <span>
+              Record each bleeding day and save a No flow entry on the
+              day after your period ends to mark the period as complete.
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className="cycle-length-list">
+              {recentPeriodLengths.map((period) => (
+                <div className="cycle-length-row" key={period.startDate}>
+                  <div className="cycle-length-date">
+                    <span>Period started</span>
+                    <strong>{formatDate(period.startDate)}</strong>
+                  </div>
+
+                  <div className="cycle-length-meter">
+                    <div className="cycle-length-track">
+                      <span
+                        style={{
+                          width: `${Math.min(
+                            (period.length / 10) * 100,
+                            100
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <strong className="cycle-length-value">
+                    {period.length} days
+                  </strong>
+                </div>
+              ))}
+            </div>
+
+            <p className="trends-chart-caption">
+              Average recorded period length:{" "}
+              {averagePeriodLength.toFixed(1)} days.
+            </p>
+          </>
         )}
       </section>
 
@@ -554,9 +646,7 @@ function CycleTrends() {
         ) : (
           <div className="trends-empty">
             <Thermometer size={28} strokeWidth={1.4} />
-            <p>
-              No clear sustained temperature shift detected yet.
-            </p>
+            <p>No clear sustained temperature shift detected yet.</p>
             <span>
               Keep recording your temperature each morning as
               consistently as possible. This check needs six consecutive

@@ -65,7 +65,7 @@ function buildPeriodEpisodes(bleedingDays) {
 
         if (
             !currentEpisode ||
-            daysBetween(currentEpisode[currentEpisode.length - 1], date) > 2
+            daysBetween(currentEpisode[currentEpisode.length - 1], date) !== 1
         ) {
             episodes.push([date]);
         } else {
@@ -248,14 +248,30 @@ function CycleTrends() {
         [cycleStarts]
     );
 
+
     const periodLengths = useMemo(
         () =>
-            episodes.map((episode) => ({
-                startDate: episode[0],
-                length: episode.length,
-            })),
-        [episodes]
+            episodes
+                .filter((episode) => {
+                    const lastBleedingDate = episode[episode.length - 1];
+                    const nextDate = parseDate(lastBleedingDate);
+                    nextDate.setDate(nextDate.getDate() + 1);
+
+                    const nextDateString = [
+                        nextDate.getFullYear(),
+                        String(nextDate.getMonth() + 1).padStart(2, "0"),
+                        String(nextDate.getDate()).padStart(2, "0"),
+                    ].join("-");
+
+                    return periodEntries[nextDateString]?.flow === "none";
+                })
+                .map((episode) => ({
+                    startDate: episode[0],
+                    length: episode.length,
+                })),
+        [episodes, periodEntries]
     );
+
 
     const bbtReadings = useMemo(
         () =>

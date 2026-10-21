@@ -16,13 +16,14 @@ import {
 import { useState } from "react";
 import PeriodTracker from "./PeriodTracker";
 import BBTTracker from "./BBTTracker";
+import ActivityLog from "./ActivityLog";
 import "./styles/dashboard.css";
 
 const navigation = [
   { label: "Overview", icon: House },
   { label: "Calendar", icon: CalendarDays },
   { label: "BBT Tracking", icon: Thermometer },
-  { label: "Sex Log", icon: Heart },
+  { label: "Activity Log", icon: Heart },
   { label: "Cycle Trends", icon: ChartNoAxesCombined },
 ];
 
@@ -231,15 +232,17 @@ function App() {
                   </button>
 
                   <button
-                    className="quick-log-card quick-log-sex"
-                    onClick={() => navigateTo("Sex Log")}
+                    className="quick-log-card quick-log-activity"
+                    onClick={() => navigateTo("Activity Log")}
                   >
                     <span className="quick-log-icon">
                       <Heart size={22} />
                     </span>
-                    <span className="quick-log-title">Sex log</span>
+                    <span className="quick-log-title">
+                      Activity Log
+                    </span>
                     <span className="quick-log-description">
-                      Add a private entry
+                      Add a personal entry
                     </span>
                     <ChevronRight
                       className="quick-log-arrow"
@@ -317,11 +320,11 @@ function App() {
             <PeriodTracker />
           ) : activePage === "BBT Tracking" ? (
             <BBTTracker />
+          ) : activePage === "Activity Log" ? (
+            <ActivityLog />
           ) : (
             <section className="placeholder-page">
               <div className="placeholder-icon">
-                {activePage === "Sex Log" && <Heart size={30} />}
-
                 {activePage === "Cycle Trends" && (
                   <ChartNoAxesCombined size={30} />
                 )}

@@ -1,0 +1,24 @@
+:root {
+  /* Color palette */
+  --thistle: #cdb4db;
+  --pastel-petal: #ffc8dd;
+  --baby-pink: #ffafcc;
+  --icy-blue: #bde0fe;
+  --sky-blue: #a2d2ff;
+
+  /* General colors */
+  --background: #fffafd;
+  --surface: #ffffff;
+  --text-primary: #352b3a;
+  --text-secondary: #766b7d;
+  --border: #eee4f0;
+
+  /* Typography */
+  --font-body: 'Playfair Display', serif;
+  --font-heading: 'Playfair Display SC', serif;
+
+  /* Shared layout */
+  --content-width: 1200px;
+  --border-radius: 16px;
+  --spacing-unit: 8px;
+}

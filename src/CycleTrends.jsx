@@ -37,13 +37,35 @@ function readActivityStorage() {
   }
 }
 
+function isValidDateKey(dateString) {
+  if (typeof dateString !== "string" || !/^\\d{4}-\\d{2}-\\d{2}$/.test(dateString)) {
+    return false;
+  }
+
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+
+  return (
+    Number.isFinite(date.getTime()) &&
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  );
+}
+
 function parseDate(dateString) {
+  if (!isValidDateKey(dateString)) return null;
+
   const [year, month, day] = dateString.split("-").map(Number);
   return new Date(year, month - 1, day);
 }
 
 function formatDate(dateString, options = {}) {
-  return parseDate(dateString).toLocaleDateString("en-US", {
+  const date = parseDate(dateString);
+
+  if (!date) return "Date unavailable";
+
+  return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -52,11 +74,12 @@ function formatDate(dateString, options = {}) {
 }
 
 function daysBetween(firstDate, secondDate) {
-  return Math.round(
-    (parseDate(secondDate).getTime() -
-      parseDate(firstDate).getTime()) /
-      86400000
-  );
+  const first = parseDate(firstDate);
+  const second = parseDate(secondDate);
+
+  if (!first || !second) return null;
+
+  return Math.round((second.getTime() - first.getTime()) / 86400000);
 }
 
 function average(values) {
@@ -66,8 +89,10 @@ function average(values) {
 
 function getBleedingDays(periodEntries) {
   return Object.entries(periodEntries)
-    .filter(([, entry]) =>
-      ["light", "medium", "heavy"].includes(entry?.flow)
+    .filter(
+      ([date, entry]) =>
+        isValidDateKey(date) &&
+        ["light", "medium", "heavy"].includes(entry?.flow)
     )
     .map(([date]) => date)
     .sort((a, b) => a.localeCompare(b));

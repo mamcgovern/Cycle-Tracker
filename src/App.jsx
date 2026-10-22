@@ -13,7 +13,7 @@ import {
   Flower2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { collection, onSnapshot } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import PeriodTracker from "./PeriodTracker";
@@ -21,6 +21,7 @@ import BBTTracker from "./BBTTracker";
 import ActivityLog from "./ActivityLog";
 import CycleTrends from "./CycleTrends";
 import CombinedCycleChart from "./CombinedCycleChart";
+import Login from "./Login";
 import "./styles/dashboard.css";
 
 const PERIOD_STORAGE_KEY = "petal-period-entries";
@@ -114,6 +115,8 @@ function formatDate(dateString) {
 }
 
 function App() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [activePage, setActivePage] = useState("Overview");
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -134,6 +137,23 @@ function App() {
     setMenuOpen(false);
   }
 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setAuthLoading(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  async function handleSignOut() {
+    try {
+      await signOut(auth);
+      setActivePage("Overview");
+    } catch (error) {
+      console.error("Unable to sign out:", error);
+    }
+  }
+
   // Keep the Overview synchronized with the same Firestore
   // collections used by the individual tracking pages.
   useEffect(() => {
@@ -151,9 +171,9 @@ function App() {
       unsubscribeActivity = null;
 
       if (!user) {
-        setPeriodEntries(readStorage(PERIOD_STORAGE_KEY));
-        setBbtEntries(readStorage(BBT_STORAGE_KEY));
-        setActivityEntries(readActivityStorage());
+        setPeriodEntries({});
+        setBbtEntries({});
+        setActivityEntries([]);
         return;
       }
 
@@ -292,6 +312,21 @@ function App() {
     };
   }, [periodEntries, bbtEntries]);
 
+  if (authLoading) {
+    return (
+      <div className="auth-loading-screen" role="status" aria-live="polite">
+        <div className="auth-loading-card">
+          <h1>petal</h1>
+          <p>Checking your account...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <Login />;
+  }
+
   return (
     <div className="app-shell">
       <aside className={`sidebar ${menuOpen ? "sidebar-open" : ""}`}>
@@ -355,6 +390,10 @@ function App() {
             {activePage === "Settings" && (
               <span className="nav-indicator" />
             )}
+          </button>
+
+          <button className="nav-link sign-out-link" onClick={handleSignOut}>
+            <span>Sign out</span>
           </button>
 
           <p className="sidebar-footer">YOUR BODY, YOUR STORY.</p>

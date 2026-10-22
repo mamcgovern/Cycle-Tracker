@@ -110,6 +110,7 @@
 }
 
 .trends-panel {
+  margin-top: 40px;
   min-width: 0;
   padding: 27px;
   border: 1px solid var(--border, #eee4f0);

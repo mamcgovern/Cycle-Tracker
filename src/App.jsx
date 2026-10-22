@@ -8,7 +8,6 @@ import {
   Settings,
   Thermometer,
   ChevronRight,
-  Plus,
   Menu,
   X,
   Flower2,
@@ -21,10 +20,12 @@ import PeriodTracker from "./PeriodTracker";
 import BBTTracker from "./BBTTracker";
 import ActivityLog from "./ActivityLog";
 import CycleTrends from "./CycleTrends";
+import CombinedCycleChart from "./CombinedCycleChart";
 import "./styles/dashboard.css";
 
 const PERIOD_STORAGE_KEY = "petal-period-entries";
 const BBT_STORAGE_KEY = "petal-bbt-entries";
+const ACTIVITY_STORAGE_KEY = "petal-activity-entries";
 
 const navigation = [
   { label: "Overview", icon: House },
@@ -43,6 +44,11 @@ function readStorage(key) {
   }
 }
 
+function readActivityStorage() {
+  const saved = readStorage(ACTIVITY_STORAGE_KEY);
+  return Array.isArray(saved) ? saved : [];
+}
+
 function parseDate(dateString) {
   const [year, month, day] = dateString.split("-").map(Number);
   return new Date(year, month - 1, day);
@@ -52,7 +58,7 @@ function daysBetween(firstDate, secondDate) {
   return Math.round(
     (parseDate(secondDate).getTime() -
       parseDate(firstDate).getTime()) /
-      86400000
+    86400000
   );
 }
 
@@ -119,27 +125,35 @@ function App() {
     readStorage(BBT_STORAGE_KEY)
   );
 
+  const [activityEntries, setActivityEntries] = useState(
+    readActivityStorage
+  );
+
   function navigateTo(page) {
     setActivePage(page);
     setMenuOpen(false);
   }
 
-  // Keep overview data synchronized with the same Firestore collections
-  // used by the period tracker and BBT tracker.
+  // Keep the Overview synchronized with the same Firestore
+  // collections used by the individual tracking pages.
   useEffect(() => {
     let unsubscribePeriod = null;
     let unsubscribeBBT = null;
+    let unsubscribeActivity = null;
 
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       unsubscribePeriod?.();
       unsubscribeBBT?.();
+      unsubscribeActivity?.();
 
       unsubscribePeriod = null;
       unsubscribeBBT = null;
+      unsubscribeActivity = null;
 
       if (!user) {
         setPeriodEntries(readStorage(PERIOD_STORAGE_KEY));
         setBbtEntries(readStorage(BBT_STORAGE_KEY));
+        setActivityEntries(readActivityStorage());
         return;
       }
 
@@ -192,12 +206,41 @@ function App() {
           console.error("Overview BBT sync error:", error);
         }
       );
+
+      unsubscribeActivity = onSnapshot(
+        collection(db, "users", user.uid, "activityEntries"),
+        (snapshot) => {
+          const entries = [];
+
+          snapshot.forEach((entryDoc) => {
+            entries.push({
+              id: entryDoc.id,
+              ...entryDoc.data(),
+            });
+          });
+
+          setActivityEntries(entries);
+
+          try {
+            localStorage.setItem(
+              ACTIVITY_STORAGE_KEY,
+              JSON.stringify(entries)
+            );
+          } catch (error) {
+            console.error("Unable to cache activity entries:", error);
+          }
+        },
+        (error) => {
+          console.error("Overview activity sync error:", error);
+        }
+      );
     });
 
     return () => {
       unsubscribeAuth();
       unsubscribePeriod?.();
       unsubscribeBBT?.();
+      unsubscribeActivity?.();
     };
   }, []);
 
@@ -277,15 +320,16 @@ function App() {
           {navigation.map(({ label, icon: Icon }) => (
             <button
               key={label}
-              className={`nav-link ${
-                activePage === label ? "nav-link-active" : ""
-              }`}
+              className={`nav-link ${activePage === label ? "nav-link-active" : ""
+                }`}
               onClick={() => navigateTo(label)}
             >
               <Icon size={19} strokeWidth={1.7} />
               <span>{label}</span>
 
-              {activePage === label && <span className="nav-indicator" />}
+              {activePage === label && (
+                <span className="nav-indicator" />
+              )}
             </button>
           ))}
         </nav>
@@ -301,9 +345,8 @@ function App() {
           </div>
 
           <button
-            className={`nav-link ${
-              activePage === "Settings" ? "nav-link-active" : ""
-            }`}
+            className={`nav-link ${activePage === "Settings" ? "nav-link-active" : ""
+              }`}
             onClick={() => navigateTo("Settings")}
           >
             <Settings size={19} strokeWidth={1.7} />
@@ -339,11 +382,6 @@ function App() {
           <span className="topbar-label">
             YOUR PERSONAL CYCLE TRACKER
           </span>
-
-          <div className="topbar-status">
-            <span className="status-dot" />
-            Your personal space
-          </div>
         </header>
 
         <div className="page-content">
@@ -351,7 +389,6 @@ function App() {
             <>
               <section className="welcome-section">
                 <div>
-                  <p className="eyebrow">A LITTLE SPACE FOR YOU</p>
                   <h1>Hello, lovely.</h1>
                   <p className="welcome-description">
                     Your cycle, at a glance.
@@ -360,31 +397,6 @@ function App() {
 
                 <div className="welcome-flower" aria-hidden="true">
                   <Flower2 size={76} strokeWidth={0.8} />
-                </div>
-              </section>
-
-              <section className="cycle-banner">
-                <div className="cycle-banner-copy">
-                  <span className="banner-label">YOUR CYCLE</span>
-                  <h2>Your story starts here.</h2>
-                  <p>
-                    Log your cycle and temperature to start
-                    discovering your personal patterns.
-                  </p>
-
-                  <button
-                    className="button-primary"
-                    onClick={() => navigateTo("Calendar")}
-                  >
-                    <Plus size={17} />
-                    Log your cycle
-                  </button>
-                </div>
-
-                <div className="banner-decoration" aria-hidden="true">
-                  <div className="banner-circle banner-circle-one" />
-                  <div className="banner-circle banner-circle-two" />
-                  <Flower2 size={100} strokeWidth={0.8} />
                 </div>
               </section>
 
@@ -408,9 +420,7 @@ function App() {
                     <span className="quick-log-icon">
                       <Droplets size={22} />
                     </span>
-                    <span className="quick-log-title">
-                      Period &amp; flow
-                    </span>
+                    <span className="quick-log-title">Flow</span>
                     <span className="quick-log-description">
                       Record your flow
                     </span>
@@ -446,9 +456,7 @@ function App() {
                     <span className="quick-log-icon">
                       <Heart size={22} />
                     </span>
-                    <span className="quick-log-title">
-                      Activity Log
-                    </span>
+                    <span className="quick-log-title">Activity</span>
                     <span className="quick-log-description">
                       Add a personal entry
                     </span>
@@ -482,11 +490,10 @@ function App() {
                     </p>
                     <p className="stat-note">
                       {cycleStats.cycleCount
-                        ? `Based on ${cycleStats.cycleCount} cycle ${
-                            cycleStats.cycleCount === 1
-                              ? "interval"
-                              : "intervals"
-                          }`
+                        ? `Based on ${cycleStats.cycleCount} cycle ${cycleStats.cycleCount === 1
+                          ? "interval"
+                          : "intervals"
+                        }`
                         : "Log at least two period starts"}
                     </p>
                   </article>
@@ -504,11 +511,10 @@ function App() {
                     </p>
                     <p className="stat-note">
                       {cycleStats.periodCount
-                        ? `Based on ${cycleStats.periodCount} completed ${
-                            cycleStats.periodCount === 1
-                              ? "period"
-                              : "periods"
-                          }`
+                        ? `Based on ${cycleStats.periodCount} completed ${cycleStats.periodCount === 1
+                          ? "period"
+                          : "periods"
+                        }`
                         : "Log a no-flow day after bleeding"}
                     </p>
                   </article>
@@ -533,18 +539,14 @@ function App() {
                 </div>
               </section>
 
-              <section className="getting-started">
-                <div className="getting-started-icon">
-                  <Heart size={22} strokeWidth={1.5} />
-                </div>
-                <div>
-                  <h3>A note to remember</h3>
-                  <p>
-                    Your patterns take time to emerge. Start logging
-                    when you're ready, and your personal trends will
-                    grow with you.
-                  </p>
-                </div>
+              {/* Everything Tracker at the bottom of the Overview */}
+
+              <section className="trends-panel">
+                <CombinedCycleChart
+                  periodEntries={periodEntries}
+                  bbtEntries={bbtEntries}
+                  activityEntries={activityEntries}
+                />
               </section>
             </>
           ) : activePage === "Calendar" ? (
